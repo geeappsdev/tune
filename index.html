@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gemini AI Playlist Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+      }
+      /* Custom styles for range inputs to work with Tailwind */
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 12px;
+        height: 12px;
+        background: #4f46e5; /* indigo-600 */
+        border-radius: 9999px;
+        cursor: pointer;
+        margin-top: -3.5px;
+        transition: transform 0.2s ease-in-out;
+      }
+      input[type="range"]:hover::-webkit-slider-thumb {
+        transform: scale(1.2);
+      }
+      input[type="range"]::-moz-range-thumb {
+        width: 12px;
+        height: 12px;
+        background: #4f46e5; /* indigo-600 */
+        border-radius: 9999px;
+        cursor: pointer;
+        border: none;
+        transition: transform 0.2s ease-in-out;
+      }
+       input[type="range"]:hover::-moz-range-thumb {
+        transform: scale(1.2);
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.0/client",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0",
+    "react-youtube": "https://aistudiocdn.com/react-youtube@^10.1.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
+  }
+}
+</script>
+</head>
+  <body class="bg-gray-50 text-zinc-800">
+    <div id="root"></div>
+    <script type="module">
+      import React, { useState, useCallback, useEffect, useRef } from 'react';
+      import ReactDOM from 'react-dom/client';
+      import { GoogleGenAI, Type } from "@google/genai";
+      import YouTube from 'react-youtube';
+
+      // --- Icons.tsx ---
+      const PlayIcon = (props) => (
+          React.createElement('svg', { xmlns: "http://www.w3.org/2000/svg", width: "24", height: "24", viewBox: "0 0 24 24", fill: "currentColor", ...props },
+              React.createElement('path', { d: "M8 5v14l11-7z" })
+          )
+      );
+      const PauseIcon = (props) => (
+          React.createElement('svg', { xmlns: "http://www.w3.org/2000/svg", width: "24", height: "24", viewBox: "0 0 24 24", fill: "currentColor", ...props },
+              React.createElement('path', { d: "M6 19h4V5H6v14zm8-14v14h4V5h-4z" })
+          )
+      );
+      const NextIcon = (props) => (
+          React.createElement('svg', { xmlns: "http://www.w3.org/2000/svg", width: "24", height: "24", viewBox: "0 0 24 24", fill: "currentColor", ...props },
+              React.createElement('path', { d: "M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" })
+          )
+      );
+      const PrevIcon = (props) => (
+          React.createElement('svg', { xmlns: "http://www.w3.org/2000/svg", width: "24", height: "24", viewBox: "0 0 24 24", fill: "currentColor", ...props },
+              React.createElement('path', { d: "M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z" })
+          )
+      );
+      const VolumeHighIcon = (props) => (
+          React.createElement('svg', { xmlns: "http://www.w3.org/2000/svg", width: "24", height: "24", viewBox: "0 0 24 24", fill: "currentColor", ...props },
+              React.createElement('path', { d: "M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" })
+          )
+      );
+      const VolumeLowIcon = (props) => (
+          React.createElement('svg', { xmlns: "http://www.w3.org/2000/svg", width: "24", height: "24", viewBox: "0 0 24 24", fill: "currentColor", ...props },
+              React.createElement('path', { d: "M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z" })
+          )
+      );
+      const VolumeMuteIcon = (props) => (
+          React.createElement('svg', { xmlns: "http://www.w3.org/2000/svg", width: "24", height: "24", viewBox: "0 0 24 24", fill: "currentColor", ...props },
+              React.createElement('path', { d: "M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" })
+          )
+      );
+      const LoadingSpinner = ({ className, ...props }) => (
+          React.createElement('svg', { className: `animate-spin h-5 w-5 text-indigo-600 ${className}`, xmlns: "http://www.w3.org/2000/svg", fill: "none", viewBox: "0 0 24 24", ...props },
+              React.createElement('circle', { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }),
+              React.createElement('path', { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" })
+          )
+      );
+      const MusicIcon = (props) => (
+          React.createElement('svg', { xmlns: "http://www.w3.org/2000/svg", width: "24", height: "24", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", ...props },
+              React.createElement('path', { d: "M9 18V5l12-2v13" }),
+              React.createElement('circle', { cx: "6", cy: "18", r: "3" }),
+              React.createElement('circle', { cx: "18", cy: "16", r: "3" })
+          )
+      );
+      const LargeMusicIcon = (props) => (
+          React.createElement('svg', { xmlns: "http://www.w3.org/2000/svg", width: "24", height: "24", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round", ...props },
+              React.createElement('path', { d: "M9 18V5l12-2v13" }),
+              React.createElement('circle', { cx: "6", cy: "18", r: "3" }),
+              React.createElement('circle', { cx: "18", cy: "16", r: "3" })
+          )
+      );
+      const MusicBarsIcon = (props) => (
+          React.createElement('svg', { viewBox: "0 0 24 24", fill: "none", xmlns: "http://www.w3.org/2000/svg", ...props },
+              React.createElement('g', { id: "SVGRepo_bgCarrier", strokeWidth: "0" }),
+              React.createElement('g', { id: "SVGRepo_tracerCarrier", strokeLinecap: "round", strokeLinejoin: "round" }),
+              React.createElement('g', { id: "SVGRepo_iconCarrier" },
+                  React.createElement('path', { d: "M15 5L15 19", stroke: "currentColor", strokeWidth: "2.4", strokeLinecap: "round", strokeLinejoin: "round" }),
+                  React.createElement('path', { d: "M10 5L10 19", stroke: "currentColor", strokeWidth: "2.4", strokeLinecap: "round", strokeLinejoin: "round", className: "[animation-delay:-0.2s] animate-[wave_1.5s_linear_infinite] origin-bottom" }),
+                  React.createElement('path', { d: "M5 9L5 15", stroke: "currentColor", strokeWidth: "2.4", strokeLinecap: "round", strokeLinejoin: "round", className: "[animation-delay:-0.8s] animate-[wave_1.5s_linear_infinite] origin-bottom" }),
+                  React.createElement('path', { d: "M20 9L20 15", stroke: "currentColor", strokeWidth: "2.4", strokeLinecap: "round", strokeLinejoin: "round", className: "[animation-delay:-0.5s] animate-[wave_1.5s_linear_infinite] origin-bottom" })
+              ),
+              React.createElement('style', null, `@keyframes wave { 0% { transform: scaleY(0.4) } 25% { transform: scaleY(1) } 50% { transform: scaleY(0.4) } 75% { transform: scaleY(0.7) } 100% { transform: scaleY(0.4) } }`)
+          )
+      );
+
+      // --- geminiService.ts ---
+      const MOCK_YOUTUBE_IDS = [
+          '5_--Flesx9fU', '8GW6sLrK40k', 'Y1_VsyLAGuk', 'P5_PqI8tT-M', 'fJ9rUzIMcZQ',
+          'y6120QOlsfU', 'aFxBw_gT10E', '_hI0qMtdVxo', '4lIRbB21-jk', 'r5A4tL_cr0U'
+      ];
+      const assignMockIds = (songs) => songs.map((song, index) => ({
+          ...song,
+          youtubeId: MOCK_YOUTUBE_IDS[index % MOCK_YOUTUBE_IDS.length],
+      }));
+      const generatePlaylist = async (prompt) => {
+          const ai = new GoogleGenAI({ apiKey: window.process.env.API_KEY });
+          try {
+              const response = await ai.models.generateContent({
+                  model: "gemini-2.5-flash",
+                  contents: `Based on the following description, create a music playlist with exactly 10 songs. Description: "${prompt}". Provide a creative name and a short, engaging description for the playlist. For each song, provide a title, the artist, and an estimated duration in seconds.`,
+                  config: {
+                      responseMimeType: "application/json",
+                      responseSchema: {
+                          type: Type.OBJECT,
+                          properties: {
+                              name: { type: Type.STRING, description: "Creative name for the playlist." },
+                              description: { type: Type.STRING, description: "A short, engaging description of the playlist's vibe." },
+                              songs: {
+                                  type: Type.ARRAY,
+                                  items: {
+                                      type: Type.OBJECT,
+                                      properties: {
+                                          title: { type: Type.STRING },
+                                          artist: { type: Type.STRING },
+                                          durationSeconds: { type: Type.INTEGER, description: "Duration of the song in seconds." },
+                                      },
+                                      required: ["title", "artist", "durationSeconds"],
+                                  },
+                              },
+                          },
+                          required: ["name", "description", "songs"],
+                      },
+                  },
+              });
+              const jsonText = response.text.trim();
+              const playlistData = JSON.parse(jsonText);
+              if (!playlistData.songs || playlistData.songs.length === 0) {
+                  throw new Error("Gemini did not return any songs.");
+              }
+              return {
+                  ...playlistData,
+                  songs: assignMockIds(playlistData.songs),
+              };
+          } catch (error) {
+              console.error("Error calling Gemini API:", error);
+              if (error instanceof Error) {
+                  throw new Error(error.message);
+              }
+              throw new Error("Failed to communicate with the Gemini API.");
+          }
+      };
+      
+      // --- PlaylistView.tsx ---
+      const PlaylistView = ({ playlist, currentSongIndex, isPlaying, onSelectSong }) => {
+          const formatTime = (seconds) => {
+              const minutes = Math.floor(seconds / 60);
+              const secs = Math.floor(seconds % 60);
+              return `${minutes}:${secs.toString().padStart(2, '0')}`;
+          };
+          return React.createElement('div', { className: "bg-transparent p-2 flex flex-col h-full" },
+              React.createElement('div', { className: "mb-2 px-2" },
+                  React.createElement('h2', { className: "text-xl font-bold text-zinc-900" }, playlist.name),
+                  React.createElement('p', { className: "text-sm text-zinc-600" }, playlist.description)
+              ),
+              React.createElement('ul', { className: "overflow-y-auto flex-grow" },
+                  playlist.songs.map((song, index) => {
+                      const isActive = index === currentSongIndex;
+                      return React.createElement('li', {
+                          key: `${song.title}-${index}`,
+                          onClick: () => onSelectSong(index),
+                          className: `flex items-center justify-between p-2.5 rounded-md cursor-pointer transition-colors duration-200 ${isActive ? 'bg-indigo-50' : 'hover:bg-gray-100'}`
+                      },
+                          React.createElement('div', { className: "flex items-center gap-4" },
+                              React.createElement('div', { className: "w-6 text-center" },
+                                  isActive && isPlaying ? React.createElement(MusicBarsIcon, { className: "w-4 h-4 text-indigo-600" }) :
+                                  isActive ? React.createElement(PlayIcon, { className: "w-4 h-4 text-indigo-600" }) :
+                                  React.createElement('span', { className: "text-zinc-500 text-sm font-medium" }, index + 1)
+                              ),
+                              React.createElement('div', null,
+                                  React.createElement('p', { className: `font-medium ${isActive ? 'text-indigo-600' : 'text-zinc-800'}` }, song.title),
+                                  React.createElement('p', { className: "text-sm text-zinc-500" }, song.artist)
+                              )
+                          ),
+                          React.createElement('span', { className: "text-sm text-zinc-500 font-medium" }, formatTime(song.durationSeconds))
+                      );
+                  })
+              )
+          );
+      };
+      
+      // --- Player.tsx ---
+      const formatTime = (seconds) => {
+          if (isNaN(seconds)) return '0:00';
+          const minutes = Math.floor(seconds / 60);
+          const secs = Math.floor(seconds % 60);
+          return `${minutes}:${secs.toString().padStart(2, '0')}`;
+      };
+
+      const CustomRangeInput = ({ value, min, max, step = 1, onChange }) => {
+          const progress = max > 0 ? (value / max) * 100 : 0;
+          const backgroundStyle = `linear-gradient(to right, #4f46e5 ${progress}%, #e5e7eb ${progress}%)`;
+
+          return React.createElement('input', {
+              type: "range",
+              min: min,
+              max: max,
+              step: step,
+              value: value,
+              onChange: onChange,
+              className: "w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer range-sm group",
+              style: { background: backgroundStyle }
+          });
+      };
+      
+      const Player = ({ song, isPlaying, setIsPlaying, onNext, onPrev, volume, onVolumeChange, onToggleMute }) => {
+          const playerRef = useRef(null);
+          const [progress, setProgress] = useState(0);
+          const [duration, setDuration] = useState(0);
+          const intervalRef = useRef(null);
+          
+          const startProgressInterval = useCallback(() => {
+              if (intervalRef.current) clearInterval(intervalRef.current);
+              intervalRef.current = window.setInterval(() => {
+                  if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+                      const currentTime = playerRef.current.getCurrentTime();
+                      setProgress(currentTime);
+                  }
+              }, 500);
+          }, []);
+
+          const stopProgressInterval = useCallback(() => {
+              if (intervalRef.current) {
+                  clearInterval(intervalRef.current);
+                  intervalRef.current = null;
+              }
+          }, []);
+
+          useEffect(() => {
+              if (isPlaying) startProgressInterval();
+              else stopProgressInterval();
+              return stopProgressInterval;
+          }, [isPlaying, startProgressInterval, stopProgressInterval]);
+          
+          useEffect(() => {
+              if (playerRef.current && typeof playerRef.current.setVolume === 'function') {
+                  playerRef.current.setVolume(volume * 100);
+              }
+          }, [volume]);
+          
+          const onReady = (event) => {
+              playerRef.current = event.target;
+              setDuration(playerRef.current.getDuration());
+              playerRef.current.setVolume(volume * 100);
+              if (isPlaying) playerRef.current.playVideo();
+          };
+          
+          const onStateChange = (event) => {
+              if (event.data === 0) onNext();
+              else if (event.data === 1) {
+                  setIsPlaying(true);
+                  setDuration(playerRef.current.getDuration());
+              } else if (event.data === 2) setIsPlaying(false);
+          };
+          
+          useEffect(() => {
+              if (!playerRef.current) return;
+              if (isPlaying) playerRef.current.playVideo();
+              else playerRef.current.pauseVideo();
+          }, [isPlaying, song.youtubeId]);
+          
+          const handleProgressChange = (e) => {
+              const newTime = Number(e.target.value);
+              setProgress(newTime);
+              if (playerRef.current) playerRef.current.seekTo(newTime);
+          };
+          
+          const handleVolumeInputChange = (e) => {
+              onVolumeChange(Number(e.target.value));
+          };
+          
+          const playerTotalDuration = duration > 0 ? duration : song.durationSeconds;
+          
+          return React.createElement('div', { className: "w-full flex flex-col gap-2" },
+              React.createElement('div', { className: "hidden" },
+                  React.createElement(YouTube, {
+                      videoId: song.youtubeId,
+                      opts: { height: '0', width: '0' },
+                      onReady: onReady,
+                      onStateChange: onStateChange,
+                      key: song.youtubeId
+                  })
+              ),
+              React.createElement('div', { className: "w-full flex items-center gap-2 text-zinc-500" },
+                  React.createElement('span', { className: "text-xs w-10 text-right" }, formatTime(progress)),
+                  React.createElement(CustomRangeInput, {
+                      min: 0, max: playerTotalDuration, value: progress, onChange: handleProgressChange
+                  }),
+                  React.createElement('span', { className: "text-xs w-10" }, formatTime(playerTotalDuration))
+              ),
+              React.createElement('div', { className: "w-full grid grid-cols-3 items-center gap-4" },
+                  React.createElement('div', { className: "flex-grow md:flex-grow-0 md:w-64" },
+                      React.createElement('p', { className: "font-semibold truncate text-zinc-900" }, song.title),
+                      React.createElement('p', { className: "text-sm text-zinc-600 truncate" }, song.artist)
+                  ),
+                  React.createElement('div', { className: "flex items-center justify-center gap-4 text-zinc-500" },
+                      React.createElement('button', { onClick: onPrev, className: "p-2 rounded-full hover:text-zinc-800 transition-colors" }, React.createElement(PrevIcon, { className: "w-5 h-5" })),
+                      React.createElement('button', { onClick: () => setIsPlaying(!isPlaying), className: "p-3 bg-indigo-600 text-white rounded-full hover:scale-105 transition-transform shadow-lg" },
+                          isPlaying ? React.createElement(PauseIcon, { className: "w-6 h-6" }) : React.createElement(PlayIcon, { className: "w-6 h-6" })
+                      ),
+                      React.createElement('button', { onClick: onNext, className: "p-2 rounded-full hover:text-zinc-800 transition-colors" }, React.createElement(NextIcon, { className: "w-5 h-5" }))
+                  ),
+                  React.createElement('div', { className: "hidden md:flex items-center justify-end gap-3 w-full text-zinc-500" },
+                      React.createElement('button', { onClick: onToggleMute, className: "p-1 rounded-full hover:text-zinc-800 transition-colors" },
+                          volume === 0 ? React.createElement(VolumeMuteIcon) : volume > 0.5 ? React.createElement(VolumeHighIcon) : React.createElement(VolumeLowIcon)
+                      ),
+                      React.createElement('div', { className: "w-24" },
+                         React.createElement(CustomRangeInput, {
+                              min: 0, max: 1, step: 0.01, value: volume, onChange: handleVolumeInputChange
+                          })
+                      )
+                  )
+              )
+          );
+      };
+      
+      // --- App.tsx ---
+      const aistudio = window.aistudio;
+      const App = () => {
+          const [prompt, setPrompt] = useState('');
+          const [isLoading, setIsLoading] = useState(false);
+          const [error, setError] = useState(null);
+          const [playlist, setPlaylist] = useState(null);
+          const [currentSongIndex, setCurrentSongIndex] = useState(0);
+          const [isPlaying, setIsPlaying] = useState(false);
+          const [isKeySelected, setIsKeySelected] = useState(false);
+          const [volume, setVolume] = useState(0.8);
+          const [lastVolume, setLastVolume] = useState(0.8);
+          
+          useEffect(() => {
+              const checkApiKey = async () => {
+                  if (await aistudio.hasSelectedApiKey()) setIsKeySelected(true);
+              };
+              checkApiKey();
+          }, []);
+          
+          const handleSelectKey = async () => {
+              await aistudio.openSelectKey();
+              setIsKeySelected(true);
+          };
+          
+          const handleGeneratePlaylist = useCallback(async () => {
+              if (!prompt.trim()) {
+                  setError('Please enter a description for your playlist.');
+                  return;
+              }
+              setIsLoading(true);
+              setError(null);
+              setPlaylist(null);
+              try {
+                  const newPlaylist = await generatePlaylist(prompt);
+                  setPlaylist(newPlaylist);
+                  setCurrentSongIndex(0);
+                  setIsPlaying(false);
+              } catch (err) {
+                  if (err instanceof Error && err.message.includes("Requested entity was not found.")) {
+                      setError("Invalid API Key. Please select a valid key.");
+                      setIsKeySelected(false);
+                  } else {
+                      setError('Failed to generate playlist. Please try again.');
+                  }
+                  console.error(err);
+              } finally {
+                  setIsLoading(false);
+              }
+          }, [prompt]);
+          
+          const handleSelectSong = (index) => {
+              setCurrentSongIndex(index);
+              setIsPlaying(true);
+          };
+          const handleNextSong = useCallback(() => {
+              if (!playlist) return;
+              setCurrentSongIndex((prevIndex) => (prevIndex + 1) % playlist.songs.length);
+              setIsPlaying(true);
+          }, [playlist]);
+          const handlePrevSong = useCallback(() => {
+              if (!playlist) return;
+              setCurrentSongIndex((prevIndex) => (prevIndex - 1 + playlist.songs.length) % playlist.songs.length);
+              setIsPlaying(true);
+          }, [playlist]);
+          
+          const handleVolumeChange = useCallback((newVolume) => {
+              setVolume(newVolume);
+              if (newVolume > 0) setLastVolume(newVolume);
+          }, []);
+
+          const toggleMute = useCallback(() => {
+              if (volume > 0) {
+                  setLastVolume(volume);
+                  setVolume(0);
+              } else {
+                  setVolume(lastVolume > 0 ? lastVolume : 0.8);
+              }
+          }, [volume, lastVolume]);
+
+          useEffect(() => {
+              const handleKeyDown = (event) => {
+                  if (event.target instanceof HTMLTextAreaElement || !playlist) return;
+                  switch (event.code) {
+                      case 'Space': event.preventDefault(); setIsPlaying(prev => !prev); break;
+                      case 'ArrowRight': event.preventDefault(); handleNextSong(); break;
+                      case 'ArrowLeft': event.preventDefault(); handlePrevSong(); break;
+                      case 'ArrowUp': event.preventDefault(); setVolume(v => Math.min(v + 0.05, 1)); break;
+                      case 'ArrowDown': event.preventDefault(); setVolume(v => Math.max(v - 0.05, 0)); break;
+                  }
+              };
+              window.addEventListener('keydown', handleKeyDown);
+              return () => window.removeEventListener('keydown', handleKeyDown);
+          }, [playlist, handleNextSong, handlePrevSong]);
+          
+          const currentSong = playlist?.songs[currentSongIndex];
+          
+          if (!isKeySelected) {
+              return React.createElement('div', { className: "min-h-screen bg-gray-50 text-zinc-800 flex flex-col items-center justify-center" },
+                  React.createElement('div', { className: "text-center p-8 bg-white rounded-lg shadow-lg border border-gray-200 max-w-md mx-4" },
+                      React.createElement('h1', { className: "text-2xl font-bold text-indigo-600 mb-4" }, "Welcome to the AI Playlist Generator"),
+                      React.createElement('p', { className: "text-zinc-600 mb-6" }, "To get started, please select your API key. This will allow the application to generate personalized playlists for you."),
+                      React.createElement('button', { onClick: handleSelectKey, className: "w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-indigo-700 transition-colors duration-200" }, "Select API Key"),
+                      error && React.createElement('p', { className: "text-red-500 mt-4 text-sm" }, error),
+                      React.createElement('p', { className: "text-xs text-zinc-500 mt-4" },
+                          "Use of this tool may require a project with billing enabled. For more information, see the ",
+                          React.createElement('a', { href: "https://ai.google.dev/gemini-api/docs/billing", target: "_blank", rel: "noopener noreferrer", className: "text-indigo-600 hover:underline" }, "billing documentation"),
+                          "."
+                      )
+                  )
+              );
+          }
+          
+          return React.createElement('div', { className: "h-screen bg-white text-zinc-800 flex flex-col" },
+              React.createElement('div', { className: "flex-grow flex flex-col md:flex-row overflow-hidden" },
+                  React.createElement('aside', { className: "w-full md:w-80 lg:w-96 flex-shrink-0 bg-gray-100 border-r border-gray-200 p-4 flex flex-col gap-4 overflow-y-auto" },
+                      React.createElement('div', { className: "bg-white p-4 rounded-lg border border-gray-200" },
+                          React.createElement('h2', { className: "text-lg font-semibold mb-3 text-zinc-900" }, "Create a playlist"),
+                          React.createElement('textarea', { value: prompt, onChange: (e) => setPrompt(e.target.value), placeholder: "e.g., 'Synthwave beats for a midnight drive.'", className: "w-full p-3 bg-gray-100 rounded-md border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition duration-200 resize-none h-24 text-zinc-800 placeholder-zinc-400", disabled: isLoading }),
+                          React.createElement('button', { onClick: handleGeneratePlaylist, disabled: isLoading, className: "w-full mt-3 bg-indigo-600 text-white font-semibold py-2.5 px-4 rounded-md hover:bg-indigo-700 transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center" },
+                              isLoading ? React.createElement(LoadingSpinner) : 'Generate Playlist'
+                          ),
+                          error && React.createElement('p', { className: "text-red-500 mt-2 text-sm" }, error)
+                      ),
+                      playlist && React.createElement('div', { className: "flex-grow bg-white rounded-lg border border-gray-200 overflow-hidden" },
+                          React.createElement(PlaylistView, { playlist, currentSongIndex, isPlaying, onSelectSong: handleSelectSong })
+                      )
+                  ),
+                  React.createElement('main', { className: "flex-grow p-4 md:p-8 overflow-y-auto bg-gray-50" },
+                      isLoading && !playlist && React.createElement('div', { className: "flex flex-col items-center justify-center h-full text-zinc-500" },
+                          React.createElement(LoadingSpinner, { className: "w-12 h-12 mx-auto text-indigo-500" }),
+                          React.createElement('p', { className: "mt-4 text-lg animate-pulse" }, "Generating your masterpiece...")
+                      ),
+                      currentSong && React.createElement('div', { className: "flex flex-col items-center justify-center h-full text-center" },
+                          React.createElement('div', { className: "w-48 h-48 md:w-64 md:h-64 bg-white rounded-lg flex items-center justify-center shadow-xl border border-gray-200 mb-8" },
+                              React.createElement(LargeMusicIcon, { className: "w-24 h-24 text-indigo-500" })
+                          ),
+                          React.createElement('h1', { className: "text-3xl md:text-4xl font-bold text-zinc-900" }, currentSong.title),
+                          React.createElement('p', { className: "text-lg md:text-xl text-zinc-600 mt-2" }, currentSong.artist)
+                      ),
+                      !isLoading && !playlist && React.createElement('div', { className: "flex flex-col items-center justify-center h-full text-zinc-500" },
+                          React.createElement(MusicIcon, { className: "w-24 h-24" }),
+                          React.createElement('h2', { className: "mt-6 text-2xl font-semibold" }, "Welcome to your personal DJ"),
+                          React.createElement('p', { className: "mt-2 max-w-sm text-center" }, "Describe a mood, a genre, or an activity, and let AI craft the perfect playlist for you.")
+                      )
+                  )
+              ),
+              currentSong && React.createElement('footer', { className: "flex-shrink-0 bg-white/80 backdrop-blur-lg border-t border-gray-200 p-3" },
+                  React.createElement(Player, { song: currentSong, isPlaying, setIsPlaying, onNext: handleNextSong, onPrev: handlePrevSong, volume, onVolumeChange: handleVolumeChange, onToggleMute: toggleMute })
+              )
+          );
+      };
+      
+      // --- index.tsx ---
+      const rootElement = document.getElementById('root');
+      if (!rootElement) {
+          throw new Error("Could not find root element to mount to");
+      }
+      const root = ReactDOM.createRoot(rootElement);
+      root.render(React.createElement(React.StrictMode, null, React.createElement(App)));
+
+    </script>
+  </body>
+</html>
